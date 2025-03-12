@@ -1,8 +1,8 @@
-# Palette Samples
+# Spectro Cloud Samples
 
 ![Spectro Cloud logo with docs inline](/static/images/spectrocloud-logo-light.svg)
 
-This repository contains a collection of patterns, code samples, and more to help you get started with Palette and VerteX. Check out the resources below to learn more.
+This repository contains a collection of patterns, code samples, and more to help you get started with Spectro Cloud products. Check out the resources below to learn more.
 
 ## Patterns
 
