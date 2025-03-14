@@ -52,7 +52,7 @@ To tear down the infrastructure:
 
 You can test the app locally with:
 ```bash
-./start-app.sh
+./start-app-local.sh
 ```
 
 Note that because this app uses the GCP Pub/Sub SDK, you must have a key file named `publisher-app.json` in the app's directory for the app to come up locally. Otherwise, it will show an error from the SDK in its logs.
@@ -81,7 +81,7 @@ The app is configured to:
 
 You can test the app locally with:
 ```bash
-./start-app.sh
+./start-app-local.sh
 ```
 
 And test message reception with:

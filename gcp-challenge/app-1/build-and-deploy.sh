@@ -11,17 +11,19 @@ export APP_NAME="publisher-app"
 export K8S_SERVICE_ACCOUNT="publisher-app"
 export PUBSUB_TOPIC="messages"
 export CLUSTER_NAME="${APP_NAME}-cluster"
-REGION="us-central1"
-ZONE="${REGION}-a"
+export REGION="us-central1"
+export ZONE="${REGION}-a"
+
+# Set up the GKE cluster and kubectl context if the cluster does not already exist.
+if ! gcloud container clusters list --region=${ZONE} | grep -q ${CLUSTER_NAME}; then
+    echo "Setting up GKE cluster and kubectl context..."
+    ./setup-gke-cluster.sh
+fi
 
 # Build and push the container image
 echo "Building container image..."
 docker build -t ${REGISTRY}/${PROJECT_ID}/${REPO}/${APP_NAME} .
 docker push ${REGISTRY}/${PROJECT_ID}/${REPO}/${APP_NAME}
-
-# Configure kubectl context
-echo "Configuring kubectl..."
-gcloud container clusters get-credentials ${CLUSTER_NAME} --zone=${ZONE}
 
 # Create the Kubernetes deployment
 echo "Creating Kubernetes deployment..."
@@ -45,7 +47,7 @@ spec:
       - name: ${APP_NAME}
         image: ${REGISTRY}/${PROJECT_ID}/${REPO}/${APP_NAME}
         env:
-        - name: GOOGLE_CLOUD_PROJECT
+        - name: PROJECT_ID
           value: "${PROJECT_ID}"
         - name: PUBSUB_TOPIC
           value: "${PUBSUB_TOPIC}"
@@ -83,5 +85,5 @@ spec:
         number: 80
 EOF
 
-echo "Deployment complete! Waiting for ingress external IP..."
+echo "Deployment complete! Waiting for ingress external IP... (you can press Ctrl+C to stop this)"
 kubectl get ingress ${APP_NAME} --watch
