@@ -6,22 +6,35 @@ WIP.
 
 *redacted
 
-# GCP project setup
+# GCP project setup (Day 1 operation)
 
-Ensure you have a GCP user account with Owner privileges on a project.
+*By "Day 1 operation" we mean this step requires privileged access to GCP and is not something that can be defined 100% in k8s resources, so it cannot be completed by those who only have write access to the GKE cluster, unlike the operations described as "Day 2 operations" below.*
 
-Export env vars for your project ID and project number (get the project number from the GCP console welcome page after selecting your project). This passes them to each deploy/teardown script you run.
+Perform the following steps manually, which aren't yet automated:
+
+- Create a GCP project.
+- Enable the IAP API and set up IAP, including filling out the consent screen and taking note of the OAuth client ID and secret.
+- Enable the Artifact Registry API and create a repository named "apps" in the us-central-1 region.
+- Enable the Cloud DNS API and configure a zone. Take note of the four NS records you must then set in your main DNS registrar,
+
+Then, export the following env vars so that they will be passed into the setup script.
 
 ```
 export PROJECT_ID="<your GCP project ID>"
 export PROJECT_NUMBER="<project number of that project>"
+export IAP_CLIENT_ID="<client_id>"
+export IAP_CLIENT_SECRET="<client_secret>"
 ```
 
-## Pub/Sub topic and subscription
+Then, run `setup-gcp-project-and-crossplane.sh`. It will:
 
-Run `setup-pubsub.sh` to create the topic and subscription.
+- Create a GKE cluster
+- Create a service account for Crossplane, assign it the Admin role, and create and download a key file for it (to `crossplane-sa-key.json`)
+- Install Crossplane into the cluster, with a k8s Secret with the keyfile contents, including the required GCP providers
 
-## Publisher app
+Now the GCP project is set up and you can peform Day 2 operations.
+
+# Publisher App
 
 This app (in the `app-1` directory) is a web application deployed to GKE that provides a simple UI for publishing messages to a Pub/Sub topic. It consists of:
 
@@ -31,33 +44,15 @@ This app (in the `app-1` directory) is a web application deployed to GKE that pr
 - Uses Workload Identity to authenticate with GCP services
 - Deployed as a GKE service with an Ingress for external access
 
-Deploy it by:
+Run `build-and-push-image.sh` from the `app-1` directory at least once before each deployment.
 
-1. Create the GKE cluster and set up IAM:
-   ```bash
-   ./create-gke-cluster.sh
-   ```
+## Deploy Publisher App and its GCP dependencies (Day 2 operation)
 
-2. Build and deploy the application:
-   ```bash
-   ./build-and-deploy.sh
-   ```
+*By "Day 2 operation" we mean that it can be deployed completely using k8s resources (a mix of vanilla k8s resources and Crossplane resources), so it doesn't require special GCP permissions. Anyone with access to create resources in the GKE cluster can do it, including a GitOps setup.*
 
-The app will be accessible via the Ingress IP address once deployment is complete.
+Run `deploy-app-1.sh` from the root directory to deploy the app.
 
-To tear down the infrastructure:
-```bash
-./teardown.sh
-```
-
-You can test the app locally with:
-```bash
-./start-app-local.sh
-```
-
-Note that because this app uses the GCP Pub/Sub SDK, you must have a key file named `publisher-app.json` in the app's directory for the app to come up locally. Otherwise, it will show an error from the SDK in its logs.
-
-## Subscriber app
+# Subscriber app
 
 This app (in the `app-2` directory) is a Cloud Run service that:
 - Receives Pub/Sub push messages at the `/pubsub` endpoint
@@ -67,33 +62,6 @@ This app (in the `app-2` directory) is a Cloud Run service that:
 
 A push subscription used instead of a pull subscription so that the Cloud Run service can run in scale to zero mode. It is waken up when GCP pushes a message to its `/pubsub` endpoint or when you open its main endpoint in your web browser (to see messages received so far).
 
-Deploy it by:
+## Deploy Subscriber App and its GCP dependencies (Day 2 operation)
 
-1. Build and deploy to Cloud Run:
-   ```bash
-   ./build-and-deploy.sh
-   ```
-
-The app is configured to:
-- Accept unauthenticated requests (for the web UI)
-- Receive messages from the Pub/Sub subscription created in `setup-pubsub.sh`
-- Run as a managed Cloud Run service in us-central1
-
-You can test the app locally with:
-```bash
-./start-app-local.sh
-```
-
-And test message reception with:
-```bash
-./test-request.sh  # For local testing
-./test-request-prod.sh  # For testing the deployed service
-```
-
-These scripts simulate the kind of HTTP requests the push subscription makes to the service.
-
-## To do
-
-- IAP for authenticating users to the web pages and other endpoints of each app
-- Adding Crossplane versions of each GCP resource currently being brought up via the Bash scripts
-- Integrating the Crossplane version of each resource with other Spectro Cloud software
+TBD
