@@ -3,21 +3,29 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 
+	"encoding/hex"
+
 	"cloud.google.com/go/pubsub"
 	"example.com/app-1/html"
+	"example.com/app-1/message"
 )
 
 var (
 	topic     *pubsub.Topic
 	topicID   string
 	projectID string
+
+	messageStore = message.NewStore(5)
 )
 
+// Displays a home page with the messages published so far.
 func handleHome(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -26,7 +34,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 
 	tmpl, err := template.New("home").Parse(html.Template)
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Error parsing template: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -34,39 +42,60 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	tmpl.Execute(w, nil)
 }
 
-func handlePublish(w http.ResponseWriter, r *http.Request) {
+// Generates a random value and publishes it to Pub/Sub.
+func handleWhisper(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	var msg struct {
-		Data string `json:"data"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	// Generate random value
+	randomBytes := make([]byte, 16)
+	if _, err := rand.Read(randomBytes); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to generate random value: %v", err), http.StatusInternalServerError)
 		return
 	}
+	fullHex := hex.EncodeToString(randomBytes)
+	randomValue := fullHex[len(fullHex)-4:] // Keep only last 4 characters
 
+	// Store the message for validation later
+	messageStore.AddMessage(randomValue)
+
+	// Publish to Pub/Sub
 	ctx := context.Background()
-	result := topic.Publish(ctx, &pubsub.Message{
-		Data: []byte(msg.Data),
-	})
-
-	// Wait for the publish operation to complete
-	id, err := result.Get(ctx)
-	if err != nil {
-		response := map[string]string{"error": err.Error()}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(response)
+	msg := &pubsub.Message{
+		Data: []byte(randomValue),
+	}
+	result := topic.Publish(ctx, msg)
+	if _, err := result.Get(ctx); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to publish message: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// Return the published message ID
-	response := map[string]string{"messageId": id}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(map[string]string{
+		"randomValue": randomValue,
+	})
+}
+
+// Validates that a message with a particular random value was published.
+func handleValidate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get random value to check from query string parameter
+	randomValue := r.URL.Query().Get("randomValue")
+	if randomValue == "" {
+		http.Error(w, "Missing randomValue parameter", http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"recentlyPublished": messageStore.HasMessage(randomValue),
+	})
 }
 
 func main() {
@@ -105,7 +134,8 @@ func main() {
 	}
 
 	http.HandleFunc("/", handleHome)
-	http.HandleFunc("/publish", handlePublish)
+	http.HandleFunc("/whisper", handleWhisper)
+	http.HandleFunc("/validate", handleValidate)
 
 	log.Printf("Starting server on :%s", port)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {

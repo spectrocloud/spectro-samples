@@ -1,6 +1,9 @@
 #!/bin/bash
 
-echo -n "Hello World" | base64 | xargs -I {} curl -X POST https://subscriber-app-194975296395.us-central1.run.app/pubsub \
+# Expect this to be set in the environment
+: "${PROJECT_NUMBER:?Environment variable PROJECT_NUMBER must be set}"
+
+echo -n "Hello World" | base64 | xargs -I {} curl -X POST https://subscriber-app-${PROJECT_NUMBER}.us-central1.run.app/pubsub \
   -H "Content-Type: application/json" \
   -d '{
     "message": {

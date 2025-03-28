@@ -4,7 +4,7 @@ const Template = `
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Received Messages</title>
+    <title>Subscriber App</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -42,50 +42,93 @@ const Template = `
             align-items: center;
             margin-bottom: 20px;
         }
-        .clear-button {
-            background-color: #dc3545;
+        .validate-form {
+            background-color: white;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .validate-button {
+            background-color: #007bff;
             color: white;
             border: none;
             padding: 8px 16px;
             border-radius: 4px;
             cursor: pointer;
         }
-        .clear-button:hover {
-            background-color: #c82333;
+        .validate-button:hover {
+            background-color: #0056b3;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #dff0d8;
+            border: 1px solid #d6e9c6;
+            color: #3c763d;
+        }
+        .error {
+            background-color: #f2dede;
+            border: 1px solid #ebccd1;
+            color: #a94442;
+        }
+        .validation {
+            margin-left: 10px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.8em;
+        }
+        .validation.success {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .validation.error {
+            background-color: #f2dede;
+            color: #a94442;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>Received Messages</h1>
-            <button class="clear-button" onclick="clearMessages()">Clear Messages</button>
+            <h1>Subscriber App</h1>
+            <h2>Received Messages</h2>
         </div>
+
         {{range .}}
         <div class="message">
-            <div class="content">{{.Content}}</div>
-            <div class="message-id">Message ID: {{.ID}}</div>
+            <div class="content">Random Value: {{.RandomValue}}</div>
+            <div class="message-id">
+                Received: {{.ReceivedAt.Format "2006-01-02 15:04:05"}}
+                {{if .Validated}}
+                    <span class="validation success">Validated by Publisher App</span>
+                {{else}}
+                    <span class="validation error">Failed Validation by Publisher App</span>
+                {{end}}
+            </div>
         </div>
         {{else}}
         <p>No messages received yet.</p>
         {{end}}
     </div>
-    <script>
-        function clearMessages() {
-            fetch('/clear', { method: 'POST' })
-                .then(response => {
-                    if (response.ok) {
-                        window.location.reload();
-                    } else {
-                        alert('Failed to clear messages');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('Failed to clear messages');
-                });
-        }
-    </script>
 </body>
 </html>
 `

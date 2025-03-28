@@ -1,11 +1,17 @@
 #!/bin/bash
 
-# Deploys the app. Assumes the app has already been built and pushed to
-# Artifact Registry at least once with the "latest" tag. As many of the GCP
-# resources related to the app are deployed via configuration on the app k8s
-# YAML (e.g. Service annotations). The rest of the GCP resources are deployed
-# using Crossplane.
+# Deploys the app. As many of the GCP resources related to the app are deployed
+# via configuration on the app k8s YAML (e.g. Service annotations). The rest of
+# the GCP resources are deployed using Crossplane.
 
+# Add check for required argument
+if [ -z "$1" ]; then
+    echo "Error: Timestamp argument is required (format: YYYYMMDD-HHMMSS)"
+    echo "Example: ./deploy-app-1.sh 20250326-125349"
+    exit 1
+fi
+
+IMAGE_TAG_TIMESTAMP="$1"
 REGISTRY="us-central1-docker.pkg.dev"
 REPO="apps"
 APP_NAME="publisher-app"
@@ -17,7 +23,11 @@ PUBSUB_TOPIC="messages"
 ADDRESS="gke-app-address"
 MANAGED_CERT="managed-cert"
 MANAGED_ZONE="gcp-challenge"
-IAP_SECRET_NAME="iap-secret"
+IAP_SECRET_NAME="publisher-app-iap-secret"
+BACKEND_CONFIG_NAME="config-default"
+IMAGE="${REGISTRY}/${PROJECT_ID}/${REPO}/${APP_NAME}:${IMAGE_TAG_TIMESTAMP}"
+
+echo "Using image: ${IMAGE}"
 
 # Create the static IP to be used with the app's load balancer.
 # No forProvider.region because we need a global address, not a regional one.
@@ -131,7 +141,7 @@ spec:
       serviceAccountName: ${K8S_SERVICE_ACCOUNT}
       containers:
       - name: ${APP_NAME}
-        image: ${REGISTRY}/${PROJECT_ID}/${REPO}/${APP_NAME}
+        image: ${IMAGE}
         env:
         - name: PROJECT_ID
           value: "${PROJECT_ID}"
@@ -152,7 +162,7 @@ kind: Service
 metadata:
   name: ${APP_NAME}
   annotations:
-    beta.cloud.google.com/backend-config: '{"default": "config-default"}'
+    beta.cloud.google.com/backend-config: '{"default": "${BACKEND_CONFIG_NAME}"}'
 spec:
   type: ClusterIP
   ports:
@@ -207,7 +217,7 @@ spec:
 apiVersion: cloud.google.com/v1
 kind: BackendConfig
 metadata:
-  name: config-default
+  name: ${BACKEND_CONFIG_NAME}
 spec:
   iap:
     enabled: true
@@ -217,6 +227,7 @@ EOF
 
 # Wait for cert to be ready
 echo "Waiting for Google to provision the managed certificate (this usually finishes within 20 minutes)..."
-kubectl wait --for=jsonpath='{.status.certificateStatus}'=ACTIVE managedcertificate ${MANAGED_CERT} --timeout=3600s
+kubectl wait --for=jsonpath='{.status.certificateStatus}'=Active managedcertificate ${MANAGED_CERT} --timeout=3600s
 
-echo "Done! You should be able to reach the app now."
+echo "Done!"
+echo "You should now be able to reach the Publisher App at https://${APP_NAME}.${MANAGED_ZONE}.palette-adv.spectrocloud.com"

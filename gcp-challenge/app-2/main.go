@@ -1,116 +1,139 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
-	"html/template"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
-	"sync"
+	"text/template"
 
 	"example.com/app-2/html"
+	"example.com/app-2/message"
+	"google.golang.org/api/idtoken"
 )
 
 // PubSubMessage is the payload of a Pub/Sub event
 type PubSubMessage struct {
 	Message struct {
 		Data string `json:"data"`
-		ID   string `json:"messageId"`
 	} `json:"message"`
 	Subscription string `json:"subscription"`
 }
 
-// Message represents a single message with its metadata
-type Message struct {
-	Content string
-	ID      string
-}
+// Replace the global variable with the new type
+var store = message.NewStore(5)
 
-// MessageStore handles storage of received messages
-type MessageStore struct {
-	messages []Message
-	mu       sync.RWMutex
-	maxSize  int
-}
+// Add a function to validate messages with the publisher app
+func validateWithPublisher(randomValue string) (bool, error) {
+	// Make IAP request to publisher app to validate
+	publisherURL := os.Getenv("PUBLISHER_APP_URL")
+	audience := os.Getenv("PUBLISHER_APP_IAP_CLIENT_ID")
 
-// NewMessageStore creates a new MessageStore with specified capacity
-func NewMessageStore(capacity int) *MessageStore {
-	return &MessageStore{
-		messages: make([]Message, 0, capacity),
-		maxSize:  capacity,
+	// Create a new request to the publisher app
+	httpReq, err := http.NewRequest("GET", publisherURL+"/validate?randomValue="+randomValue, nil)
+	if err != nil {
+		return false, fmt.Errorf("failed to create request: %w", err)
 	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	// Make the request to the publisher app using IAP helper to add auth header
+	var validationResponse bytes.Buffer
+	if err := makeIAPRequest(&validationResponse, httpReq, audience); err != nil {
+		return false, fmt.Errorf("failed to validate with publisher using IAP helper: %w", err)
+	}
+
+	var result struct {
+		RecentlyPublished bool `json:"recentlyPublished"`
+	}
+	if err := json.NewDecoder(&validationResponse).Decode(&result); err != nil {
+		return false, fmt.Errorf("failed to decode validation response: %w", err)
+	}
+
+	return result.RecentlyPublished, nil
 }
 
-var store = NewMessageStore(5)
+func handlePubSubMessage(w http.ResponseWriter, r *http.Request) {
+	// Parse the incoming message
+	var m PubSubMessage
+	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+		http.Error(w, fmt.Sprintf("Error parsing message: %v", err), http.StatusBadRequest)
+		return
+	}
 
-func handleMessages(w http.ResponseWriter, r *http.Request) {
+	// Decode the base64 encoded data
+	randomValueBytes, err := base64.StdEncoding.DecodeString(m.Message.Data)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error decoding message data: %v", err), http.StatusBadRequest)
+		return
+	}
+	randomValue := string(randomValueBytes)
+
+	// Validate the message with the publisher
+	validated, err := validateWithPublisher(randomValue)
+	if err != nil {
+		log.Printf("Error validating message: %v", err)
+		http.Error(w, fmt.Sprintf("Error validating message: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Store the message for display in the UI
+	store.AddMessage(message.New(randomValue, validated))
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// Add a simple HTML form for the UI
+func handleHome(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	store.mu.RLock()
-	messages := make([]Message, len(store.messages))
-	copy(messages, store.messages)
-	store.mu.RUnlock()
+	// Get current messages from the store
+	messages := store.GetMessages()
 
-	tmpl, err := template.New("messages").Parse(html.Template)
+	// Create template
+	tmpl, err := template.New("home").Parse(html.Template)
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Error parsing template: %v", err), http.StatusInternalServerError)
 		return
 	}
 
+	// Set content type and execute template
 	w.Header().Set("Content-Type", "text/html")
-	tmpl.Execute(w, messages)
+	if err := tmpl.Execute(w, messages); err != nil {
+		http.Error(w, fmt.Sprintf("Error executing template: %v", err), http.StatusInternalServerError)
+		return
+	}
 }
 
-func handlePubSub(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+// makeIAPRequest makes a request to an application protected by Identity-Aware
+// Proxy with the given audience. The audience should be the IAP client ID.
+func makeIAPRequest(w io.Writer, request *http.Request, audience string) error {
+	ctx := context.Background()
 
-	var msg PubSubMessage
-	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
-		http.Error(w, "Bad Request: Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	// Decode the base64-encoded message data
-	data, err := base64.StdEncoding.DecodeString(msg.Message.Data)
+	// client is a http.Client that automatically adds an "Authorization" header
+	// to any requests made.
+	client, err := idtoken.NewClient(ctx, audience)
 	if err != nil {
-		http.Error(w, "Bad Request: Invalid base64 data", http.StatusBadRequest)
-		return
+		return fmt.Errorf("idtoken.NewClient: %w", err)
 	}
 
-	store.mu.Lock()
-	store.messages = append(store.messages, Message{
-		Content: string(data),
-		ID:      msg.Message.ID,
-	})
-
-	// Remove oldest messages if we exceed capacity
-	if len(store.messages) > store.maxSize {
-		store.messages = store.messages[1:]
+	response, err := client.Do(request)
+	if err != nil {
+		return fmt.Errorf("client.Do: %w", err)
 	}
-	store.mu.Unlock()
-
-	// Acknowledge the message by returning 2xx status
-	w.WriteHeader(http.StatusOK)
-}
-
-func handleClear(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
+	defer response.Body.Close()
+	if _, err := io.Copy(w, response.Body); err != nil {
+		return fmt.Errorf("io.Copy: %w", err)
 	}
 
-	store.mu.Lock()
-	store.messages = make([]Message, 0, store.maxSize)
-	store.mu.Unlock()
-
-	w.WriteHeader(http.StatusOK)
+	return nil
 }
 
 func main() {
@@ -119,9 +142,8 @@ func main() {
 		port = "8080"
 	}
 
-	http.HandleFunc("/", handleMessages)
-	http.HandleFunc("/pubsub", handlePubSub)
-	http.HandleFunc("/clear", handleClear)
+	http.HandleFunc("/", handleHome)
+	http.HandleFunc("/pubsub", handlePubSubMessage)
 
 	log.Printf("Starting server on :%s", port)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {

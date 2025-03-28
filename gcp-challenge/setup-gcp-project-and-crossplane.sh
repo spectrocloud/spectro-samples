@@ -9,17 +9,20 @@ set -e
 # Expect this to be set in the environment
 : "${PROJECT_ID:?Environment variable PROJECT_ID must be set}"
 : "${PROJECT_NUMBER:?Environment variable PROJECT_NUMBER must be set}"
-: "${IAP_CLIENT_ID:?Environment variable IAP_CLIENT_ID must be set}"
-: "${IAP_CLIENT_SECRET:?Environment variable IAP_CLIENT_SECRET must be set}"
+: "${PUBLISHER_APP_IAP_CLIENT_ID:?Environment variable PUBLISHER_APP_IAP_CLIENT_ID must be set}"
+: "${PUBLISHER_APP_IAP_CLIENT_SECRET:?Environment variable PUBLISHER_APP_IAP_CLIENT_SECRET must be set}"
+: "${SUBSCRIBER_APP_IAP_CLIENT_ID:?Environment variable SUBSCRIBER_APP_IAP_CLIENT_ID must be set}"
+: "${SUBSCRIBER_APP_IAP_CLIENT_SECRET:?Environment variable SUBSCRIBER_APP_IAP_CLIENT_SECRET must be set}"
 
 REGION="us-central1"
 ZONE="${REGION}-a"
-CLUSTER_NAME="gke-cluster-5"
+CLUSTER_NAME="gke-cluster"
 CROSSPLANE_NAMESPACE="crossplane-system"
 CROSSPLANE_SA="crossplane-sa"
-CROSSPLANE_PROVIDERS="cloudplatform cloudrun compute dns pubsub"
+CROSSPLANE_PROVIDERS="cloudplatform cloudrun compute dns pubsub iap"
 CROSSPLANE_PROVIDER_VERSION="v1.12.1"
-IAP_SECRET_NAME="iap-secret"
+PUBLISHER_APP_IAP_SECRET_NAME="publisher-app-iap-secret"
+SUBSCRIBER_APP_IAP_SECRET_NAME="subscriber-app-iap-secret"
 
 # Ensure gcloud is set to the correct project.
 echo "Setting gcloud project to ${PROJECT_ID}..."
@@ -33,10 +36,39 @@ gcloud services enable \
     cloudbuild.googleapis.com \
     cloudresourcemanager.googleapis.com \
     container.googleapis.com \
+    dns.googleapis.com \
     iam.googleapis.com \
     iap.googleapis.com \
     pubsub.googleapis.com \
     run.googleapis.com || true
+
+# Create Artifact Registry repository if it doesn't exist
+echo "Creating Artifact Registry repository..."
+if ! gcloud artifacts repositories list --location=${REGION} | grep -q "apps"; then
+    gcloud artifacts repositories create apps \
+        --repository-format=docker \
+        --location=${REGION} \
+        --description="Docker repository for application images"
+    echo "Artifact Registry repository 'apps' created."
+else
+    echo "Artifact Registry repository 'apps' already exists."
+fi
+
+# Create Cloud DNS zone if it doesn't exist
+echo "Creating Cloud DNS zone..."
+if ! gcloud dns managed-zones list | grep -q "gcp-challenge"; then
+    gcloud dns managed-zones create "gcp-challenge" \
+        --dns-name="gcp-challenge.palette-adv.spectrocloud.com" \
+        --description="DNS zone for GCP challenge"
+    echo "Cloud DNS zone 'gcp-challenge' created."
+else
+    echo "Cloud DNS zone 'gcp-challenge' already exists."
+fi
+
+# Display nameservers
+echo "Nameservers for DNS zone:"
+gcloud dns managed-zones describe "gcp-challenge" \
+    --format="get(nameServers)" | tr ';' '\n'
 
 # Create the GKE cluster if it doesn't exist.
 if ! gcloud container clusters list --region=${ZONE} | grep -q ${CLUSTER_NAME}; then
@@ -50,6 +82,9 @@ if ! gcloud container clusters list --region=${ZONE} | grep -q ${CLUSTER_NAME}; 
 
     echo "GKE cluster created."
 fi
+
+echo "Waiting two minutes..."
+sleep 120
 
 # Get credentials and set context to GKE cluster
 gcloud container clusters get-credentials ${CLUSTER_NAME} --zone=${ZONE}
@@ -74,6 +109,9 @@ done
 echo "Waiting for Crossplane pods to be ready..."
 kubectl wait --for=condition=Ready pods --all -n ${CROSSPLANE_NAMESPACE} --timeout=300s
 
+echo "Waiting for 10 seconds..."
+sleep 10
+
 # Install each required GCP Crossplane provider
 for provider in ${CROSSPLANE_PROVIDERS}; do
     cat <<EOF | kubectl apply -f -
@@ -85,6 +123,9 @@ spec:
     package: xpkg.crossplane.io/crossplane-contrib/provider-gcp-${provider}:${CROSSPLANE_PROVIDER_VERSION}
 EOF
 done
+
+echo "Waiting for 10 seconds..."
+sleep 10
 
 # Create a GCP service account for Crossplane if one doesn't exist.
 if ! gcloud iam service-accounts list --filter="email:${CROSSPLANE_SA}@${PROJECT_ID}.iam.gserviceaccount.com" --format="get(email)" | grep -q "${CROSSPLANE_SA}"; then
@@ -118,6 +159,9 @@ else
         --role="roles/admin"
 fi
 
+echo "Sleeping for 10 seconds..."
+sleep 10
+
 # Create a key for the service account and save it locally.
 echo "Creating key for ${CROSSPLANE_SA}, saving it to disk at ${CROSSPLANE_SA}-key.json..."
 gcloud iam service-accounts keys create ${CROSSPLANE_SA}-key.json \
@@ -136,8 +180,7 @@ while ! kubectl get crd providerconfigs.gcp.upbound.io 2>/dev/null; do
     sleep 1
 done
 
-# Race condition. TODO: Fix.
-echo "Waiting for 10 seconds before creating ProviderConfig..."
+echo "Waiting for 10 seconds..."
 sleep 10
 
 # Create a ProviderConfig for the Crossplane GCP provider
@@ -156,6 +199,8 @@ spec:
       key: creds
 EOF
 
+echo "Waiting for 10 seconds..."
+
 # Add "cluster-admin" role to the provider pods' service accounts and bounce the pods
 for provider in ${CROSSPLANE_PROVIDERS}; do
     echo "Waiting for ${provider} provider pod to be created..."
@@ -171,12 +216,17 @@ for provider in ${CROSSPLANE_PROVIDERS}; do
         --serviceaccount=${CROSSPLANE_NAMESPACE}:${SA_NAME}
     
     kubectl delete pod -l pkg.crossplane.io/provider=provider-gcp-${provider} -n ${CROSSPLANE_NAMESPACE}
-done 
+done
 
-# Create a k8s Secret with IAP credentials.
-echo "Creating k8s Secret with IAP credentials..."
-kubectl create secret generic ${IAP_SECRET_NAME} \
-    --from-literal=client_id=${IAP_CLIENT_ID} \
-    --from-literal=client_secret=${IAP_CLIENT_SECRET}
+# Create k8s Secrets with IAP credentials.
+echo "Creating Publisher App IAP credentials k8s Secret..."
+kubectl create secret generic ${PUBLISHER_APP_IAP_SECRET_NAME} \
+    --from-literal=client_id=${PUBLISHER_APP_IAP_CLIENT_ID} \
+    --from-literal=client_secret=${PUBLISHER_APP_IAP_CLIENT_SECRET}
+
+echo "Creating Subscriber App IAP credentials k8s Secret..."
+kubectl create secret generic ${SUBSCRIBER_APP_IAP_SECRET_NAME} \
+    --from-literal=client_id=${SUBSCRIBER_APP_IAP_CLIENT_ID} \
+    --from-literal=client_secret=${SUBSCRIBER_APP_IAP_CLIENT_SECRET}
 
 echo "Done."
