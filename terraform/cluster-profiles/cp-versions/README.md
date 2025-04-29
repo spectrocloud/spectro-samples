@@ -1,29 +1,22 @@
-
 ## Intermediate Pattern
 
 The intermediate pattern of managing and maintain cluster profiles. Each cluster profile version is defined through a single `spectrocloud_cluster_profile` resource. Terraform logic is applied to achieve unique cluster profile versions.
 
+| Pros                                         |
+| -------------------------------------------- |
+| Reduces code duplication                     |
+| Adding new versions is a low complexity task |
 
-| Pros |
-| ---- |
-| Reduces code duplication |
-| Adding new versions is a low complexity task|
-
-
-
-
-| Cons |
-| ---- |
-| Requires more complex Terraform logic |
-| Difficult to understand |
+| Cons                                                                                                               |
+| ------------------------------------------------------------------------------------------------------------------ |
+| Requires more complex Terraform logic                                                                              |
+| Difficult to understand                                                                                            |
 | Removing versions is difficult as cluster profiles are recreated. This us due to state being maintained in a list. |
-| YAML customization not supported. Additional logic is required to support YAML customization. |
-
+| YAML customization not supported. Additional logic is required to support YAML customization.                      |
 
 ## Usage
 
-
-1. List the number of versions desired in the `locals.cp-versions`  variable.
+1. List the number of versions desired in the `locals.cp-versions` variable.
 
 ```hcl
 cp-versions    = ["1.0.0", "1.0.1", "1.0.3"]
@@ -66,8 +59,7 @@ data "spectrocloud_pack" "csi-aws-ebs" {
 }
 ```
 
-
-4. Add a local variable that contains a reference to the respective data resource.  This is required for the dynamic behavior of the `spectrocloud_cluster_profile` resource. Add or remove packs as needed.
+4. Add a local variable that contains a reference to the respective data resource. This is required for the dynamic behavior of the `spectrocloud_cluster_profile` resource. Add or remove packs as needed.
 
 ```hcl
   pack_data = {
@@ -89,9 +81,9 @@ data "spectrocloud_pack" "csi-aws-ebs" {
   }
 ```
 
+5. Change the node variables to the desired values. AWS is used as an example but the concept applies to other cloud providers.
 
-5. Specify the desired cluster profile version when deploying a cluster. You can use a target variable or manually specify the version. In the example below, the target variable `target_version` is used.
-
+6. Specify the desired cluster profile version when deploying a cluster. You can use a target variable or manually specify the version. In the example below, the target variable `target_version` is used.
 
 ```hcl
 cluster_profile {

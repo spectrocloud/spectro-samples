@@ -30,7 +30,37 @@ variable "aws_key_pair_name" {
 }
 
 
+variable "aws_control_plane_nodes" {
+  type = object({
+    count              = number
+    instance_type      = string
+    disk_size_gb       = number
+    availability_zones = list(string)
+  })
+  description = "The configuration for the control plane nodes."
+  default = {
+    count              = 1
+    instance_type      = "t3.small"
+    disk_size_gb       = 20
+    availability_zones = ["us-east-1a"]
+  }
+}
 
+variable "aws_worker_nodes" {
+  type = object({
+    count              = number
+    instance_type      = string
+    disk_size_gb       = number
+    availability_zones = list(string)
+  })
+  description = "The configuration for the worker nodes."
+  default = {
+    count              = 1
+    instance_type      = "t3.small"
+    disk_size_gb       = 20
+    availability_zones = ["us-east-1a"]
+  }
+}
 
 locals {
   target_version = "1.0.0"
