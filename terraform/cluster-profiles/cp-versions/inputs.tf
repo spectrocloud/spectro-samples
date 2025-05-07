@@ -1,11 +1,12 @@
 # Copyright (c) Spectro Cloud
 # SPDX-License-Identifier: Apache-2.0
 
-
-variable "aws_cloud_account_name" {
-  type        = string
-  description = "The name of the AWS account registered in Palette."
-}
+# Uncomment the following variable if you want to use a specific AWS account name registered in Palette and is  use the cluster.tf file to create the cluster profile.
+# Also, uncomment the variable data resource "spectrocloud_cloudaccount_aws" "account" in the data.tf file.
+# variable "aws_cloud_account_name" {
+#   type        = string
+#   description = "The name of the AWS account registered in Palette."
+# }
 
 variable "aws_region" {
   type        = string

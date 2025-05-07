@@ -4,8 +4,8 @@
 resource "spectrocloud_cluster_profile" "aws-profile" {
   count = length(local.cp-versions)
 
-  # name        = "tf-aws-profile-${local.cp-versions[count.index]}" // If you don't want multiple profiles, you can use a single profile for all versions. Remove the count.index from the name.
-  name        = "tf-aws-profile"
+  name = "tf-aws-profile-${local.cp-versions[count.index]}" // If you don't want multiple profiles, you can use a single profile for all versions. Remove the count.index from the name as shown below.
+  # name        = "tf-aws-profile"
   description = "A basic cluster profile for AWS"
   tags        = concat(var.tags, ["env:aws", "version:${local.cp-versions[count.index]}"])
   cloud       = "aws"
