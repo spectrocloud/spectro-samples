@@ -5,11 +5,16 @@ data "spectrocloud_registry" "public_registry" {
   name = "Public Repo"
 }
 
-
-
-data "spectrocloud_cloudaccount_aws" "account" {
-  name = var.aws_cloud_account_name
+// A public Helm registry
+data "spectrocloud_registry" "our_helm_registry" {
+  name = "Public Spectro Helm Repo"
 }
+
+
+# Uncomment this if you are using a cloud account
+# data "spectrocloud_cloudaccount_aws" "account" {
+#   name = var.aws_cloud_account_name
+# }
 
 
 
@@ -49,5 +54,11 @@ data "spectrocloud_pack" "cni-cilium-oss" {
   registry_uid = data.spectrocloud_registry.public_registry.id
 }
 
+data "spectrocloud_pack" "scaffold" {
+  count        = length([for version, pack in local.packs : version if contains(keys(pack), "scaffold")])
+  name         = "scaffold"
+  version      = [for version, pack in local.packs : pack["scaffold"] if contains(keys(pack), "scaffold")][count.index]
+  registry_uid = data.spectrocloud_registry.our_helm_registry.id
+}
 
 

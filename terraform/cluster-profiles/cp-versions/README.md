@@ -12,7 +12,6 @@ The intermediate pattern of managing and maintain cluster profiles. Each cluster
 | Requires more complex Terraform logic                                                                              |
 | Difficult to understand                                                                                            |
 | Removing versions is difficult as cluster profiles are recreated. This us due to state being maintained in a list. |
-| YAML customization not supported. Additional logic is required to support YAML customization.                      |
 
 ## Usage
 
@@ -89,4 +88,12 @@ data "spectrocloud_pack" "csi-aws-ebs" {
 cluster_profile {
     id = spectrocloud_cluster_profile.aws-profile[index(local.cp-versions, local.target_version)].id
   }
+```
+
+7. If you want to provide a YAML file for a pack, create a folder with the name of the pack and add the YAML file to the folder. The YAML file will be used for the specified version. In this example, the `scaffold` pack is used. The folder is named `scaffold` and the each version of the pack has its own YAML file with the version number as the file name.
+
+```
+scaffold/
+├── 0.1.0.yaml
+├── 0.1.1.yaml
 ```

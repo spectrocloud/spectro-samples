@@ -78,12 +78,14 @@ locals {
       "cni-calico"  = "3.26.1"
       "kubernetes"  = "1.27.5"
       "ubuntu-aws"  = "22.04"
+      "scaffold"    = "0.1.0"
     }
     "1.0.3" = {
       "csi-aws-ebs"    = "1.24.0"
       "cni-cilium-oss" = "1.14.3"
       "kubernetes"     = "1.28.3"
       "ubuntu-aws"     = "22.04"
+      "scaffold"       = "0.1.1"
     }
   }
 
@@ -103,6 +105,9 @@ locals {
     }
     "cni-cilium-oss" = {
       data_source = data.spectrocloud_pack.cni-cilium-oss
+    }
+    "scaffold" = {
+      data_source = data.spectrocloud_pack.scaffold
     }
   }
 }
