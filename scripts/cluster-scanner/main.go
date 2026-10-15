@@ -3,6 +3,7 @@ package main
 import (
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/spectrocloud/palette-samples/cluster-scanner/internal"
 	"github.com/spectrocloud/palette-sdk-go/client"
@@ -14,6 +15,9 @@ func main() {
 	host := os.Getenv("PALETTE_HOST")
 	apiKey := os.Getenv("PALETTE_API_KEY")
 	projectUid := os.Getenv("PALETTE_PROJECT_UID")
+
+	// Read the optional list of cloud types to scan. If it is not set, all cloud types are scanned.
+	cloudTypes := internal.ParseCloudTypes(os.Getenv("SCAN_CLOUD_TYPES"))
 
 	// Initialize a logger for structured output.
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -51,6 +55,16 @@ func main() {
 	if len(clusters) == 0 {
 		logger.Warn("There are no clusters running.")
 		return
+	}
+
+	// Keep only the clusters whose cloud type is listed in SCAN_CLOUD_TYPES, if it is set.
+	if len(cloudTypes) != 0 {
+		logger.Info("Filtering clusters by cloud type.", "cloudTypes", strings.Join(cloudTypes, ","))
+		clusters = internal.FilterClustersByCloudType(clusters, cloudTypes)
+		if len(clusters) == 0 {
+			logger.Warn("There are no clusters running with the specified cloud types.")
+			return
+		}
 	}
 
 	// Check for clusters running for more than 24 hours using the SearchOldClusters function.
