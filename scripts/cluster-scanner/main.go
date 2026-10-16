@@ -59,8 +59,9 @@ func main() {
 
 	// Keep only the clusters whose cloud type is listed in SCAN_CLOUD_TYPES, if it is set.
 	if len(cloudTypes) != 0 {
-		logger.Info("Filtering clusters by cloud type.", "cloudTypes", strings.Join(cloudTypes, ","))
+		total := len(clusters)
 		clusters = internal.FilterClustersByCloudType(clusters, cloudTypes)
+		logger.Info("Filtered clusters by cloud type.", "cloudTypes", strings.Join(cloudTypes, ","), "kept", len(clusters), "skipped", total-len(clusters))
 		if len(clusters) == 0 {
 			logger.Warn("There are no clusters running with the specified cloud types.")
 			return
