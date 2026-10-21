@@ -9,7 +9,8 @@ updates:
       prefix: "chore:"
 
   - package-ecosystem: "gomod"
-    directory: "/scripts"
+    directories:
+      - "/scripts/*"
     schedule:
       interval: "monthly"
     target-branch: "main"
@@ -17,7 +18,8 @@ updates:
       prefix: "chore:"
 
   - package-ecosystem: "terraform"
-    directory: "/terraform"
+    directories:
+      - "/terraform/cluster-profiles/*"
     schedule:
       interval: "monthly"
     target-branch: "main"
