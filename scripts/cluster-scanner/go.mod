@@ -4,6 +4,8 @@ go 1.22.5
 
 toolchain go1.22.8
 
+require github.com/spectrocloud/palette-sdk-go v0.0.0-20240930211255-e224a905d31a
+
 require (
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
@@ -27,7 +29,6 @@ require (
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
-	github.com/spectrocloud/palette-sdk-go v0.0.0-20240930211255-e224a905d31a // indirect
 	go.mongodb.org/mongo-driver v1.16.0 // indirect
 	go.opentelemetry.io/otel v1.28.0 // indirect
 	go.opentelemetry.io/otel/metric v1.28.0 // indirect
